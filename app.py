@@ -12,11 +12,16 @@ import re
 from datetime import datetime, timedelta
 import requests
 from dotenv import load_dotenv
+import asyncio
+from threading import Thread
+import nest_asyncio
+from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton
+from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, CallbackQueryHandler
 
 load_dotenv()
 
 app = Flask(__name__)
-app.secret_key = 'your_secret_key_here'  # Change this in production
+app.secret_key = os.getenv('SECRET_KEY', 'fallback_secret_key')
 app.config['MAX_CONTENT_LENGTH'] = 10 * 1024 * 1024  # 10MB file size limit
 
 GROQ_API_KEY = os.getenv('GROQ_API_KEY')
@@ -29,13 +34,22 @@ def parse_whatsapp_chat(file_path):
         lines = f.readlines()
     
     for line in lines:
-        # WhatsApp format: dd/mm/yyyy, h:mm am/pm - sender: message
+        # Handle various WhatsApp formats
+        # Try dd/mm/yyyy, h:mm am/pm - sender: message
         match = re.match(r'^(\d{1,2}/\d{1,2}/\d{4}), (\d{1,2}:\d{2}\s*[ap]m) - (.+?): (.+)', line.strip(), re.IGNORECASE)
+        if not match:
+            # Try [mm/dd/yy, h:mm:ss AM] sender: message
+            match = re.match(r'^\[(\d{1,2}/\d{1,2}/\d{2,4}, \d{1,2}:\d{2}:\d{2} [APM]{2})\] (.+?): (.+)', line.strip())
         if match:
-            date_str, time_str, sender, message = match.groups()
-            timestamp_str = f"{date_str}, {time_str.strip()}"
+            if len(match.groups()) == 4:
+                date_str, time_str, sender, message = match.groups()
+                timestamp_str = f"{date_str}, {time_str.strip()}"
+                date_format = '%d/%m/%Y, %I:%M %p'
+            else:
+                timestamp_str, sender, message = match.groups()
+                date_format = '%m/%d/%y, %I:%M:%S %p'
             try:
-                timestamp = datetime.strptime(timestamp_str, '%d/%m/%Y, %I:%M %p')
+                timestamp = datetime.strptime(timestamp_str, date_format)
                 messages.append({
                     'timestamp': timestamp,
                     'sender': sender,
@@ -212,6 +226,61 @@ def upload():
         flash('No file part')
         return redirect(url_for('index'))
     file = request.files['file']
+    if not file.filename or file.filename == '':
+        flash('No selected file')
+        return redirect(url_for('index'))
+    if not (file.filename.endswith('.txt') or file.filename.endswith('.zip')):
+        flash('Only .txt or .zip files are allowed')
+        return redirect(url_for('index'))
+    if file.content_length and file.content_length > 10 * 1024 * 1024:  # 10MB check
+        flash('File too large. Max 10MB allowed.')
+        return redirect(url_for('index'))
+    
+    temp_dir = None
+    file_path = None
+    if file.filename.endswith('.zip'):
+        import zipfile
+        import tempfile
+        temp_dir = tempfile.mkdtemp()
+        zip_path = os.path.join(temp_dir, 'chat.zip')
+        file.save(zip_path)
+        with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+            zip_ref.extractall(temp_dir)
+            for root, dirs, files in os.walk(temp_dir):
+                for f in files:
+                    if f.endswith('.txt'):
+                        file_path = os.path.join(root, f)
+                        break
+        if not file_path:
+            flash('No .txt file found in ZIP.')
+            return redirect(url_for('index'))
+    else:
+        file_path = os.path.join('uploads', file.filename)
+        os.makedirs('uploads', exist_ok=True)
+        file.save(file_path)
+        temp_dir = None  # Not temp
+    
+    # Validate format
+    try:
+        with open(file_path, 'r', encoding='utf-8') as f:
+            content = f.read(1024)
+        if not re.search(r'\d{1,2}/\d{1,2}/\d{4}, \d{1,2}:\d{2}', content):
+            flash('Invalid file format. Must be WhatsApp export.')
+            return redirect(url_for('index'))
+    except:
+        flash('Error reading file.')
+        return redirect(url_for('index'))
+    
+    try:
+        messages, participants = parse_whatsapp_chat(file_path)
+        if not messages:
+            flash('No valid messages found in file.')
+            return redirect(url_for('index'))
+        return render_template('select_identity.html', participants=participants, file_path=file_path)
+    except ValueError as e:
+        flash(str(e))
+        return redirect(url_for('index'))
+    file = request.files['file']
     if file.filename == '':
         flash('No selected file')
         return redirect(url_for('index'))
@@ -285,6 +354,103 @@ def select_identity():
 
 
 
+TELEGRAM_BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN')
+
+async def bot_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("Send me a ZIP file containing your WhatsApp chat export (.txt). I'll analyze it!\n\n⚠️ **Privacy Notice:** Your chat data is processed locally and not stored. Files are deleted after analysis. Only share with consent. Analysis uses AI but no data is shared externally.")
+
+async def bot_handle_zip(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    file = update.message.document
+    if not file.file_name.endswith('.zip'):
+        await update.message.reply_text("Please send a ZIP file.")
+        return
+
+    await update.message.reply_text("🔄 Analyzing your chat... Please wait.")
+
+    import zipfile
+    import tempfile
+    with tempfile.TemporaryDirectory() as temp_dir:
+        zip_path = os.path.join(temp_dir, 'chat.zip')
+        txt_path = None
+
+        file_obj = await file.get_file()
+        await file_obj.download_to_drive(zip_path)
+
+        with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+            zip_ref.extractall(temp_dir)
+            for root, dirs, files in os.walk(temp_dir):
+                for f in files:
+                    if f.endswith('.txt'):
+                        txt_path = os.path.join(root, f)
+                        break
+
+        if not txt_path:
+            await update.message.reply_text("No .txt file found in ZIP.")
+            return
+
+        try:
+            messages, participants = parse_whatsapp_chat(txt_path)
+            context.user_data['messages'] = messages
+            context.user_data['participants'] = participants
+            if len(participants) < 2:
+                await update.message.reply_text("Chat must have at least two participants.")
+                return
+            keyboard = [[InlineKeyboardButton(p, callback_data=f'you_{p}')] for p in participants]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            await update.message.reply_text("Who are you?", reply_markup=reply_markup)
+        except Exception as e:
+            await update.message.reply_text(f"Error: {str(e)}")
+
+async def bot_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    data = query.data
+    if data.startswith('you_'):
+        you = data[4:]
+        context.user_data['you'] = you
+        participants = context.user_data['participants']
+        them_options = [p for p in participants if p != you]
+        keyboard = [[InlineKeyboardButton(them, callback_data=f'them_{them}')] for them in them_options]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        await query.edit_message_text("Who is 'them'?", reply_markup=reply_markup)
+    elif data.startswith('them_'):
+        them = data[5:]
+        you = context.user_data['you']
+        messages = context.user_data['messages']
+        scores = calculate_scores(messages, you, them)
+        def make_bar(pct):
+            filled = int(pct // 10)
+            empty = 10 - filled
+            return '█' * filled + '░' * empty
+        result = f"🎉 **Chat Analysis Report** 🎉\n\nBetween **{you}** and **{them}**\n\n"
+        roles_info = [
+            ('🚀 Conversation Starter', 'starter'),
+            ('💬 Snubber', 'snubber'),
+            ('❤️ Romantic One', 'romantic'),
+            ('😈 Trouble One', 'trouble'),
+            ('⚠️ At Fault', 'fault'),
+            ('👂 Listener', 'listener'),
+            ('😂 Joker', 'joker')
+        ]
+        for emoji_name, role in roles_info:
+            total = scores[you][role] + scores[them][role]
+            you_pct = (scores[you][role] / total * 100) if total > 0 else 0
+            them_pct = (scores[them][role] / total * 100) if total > 0 else 0
+            result += f"{emoji_name}\n{you}: {you_pct:.1f}% {make_bar(you_pct)}\n{them}: {them_pct:.1f}% {make_bar(them_pct)}\n\n"
+        await query.edit_message_text(result[:4000], parse_mode='Markdown')
+
+async def run_bot():
+    application = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
+    application.add_handler(CommandHandler("start", bot_start))
+    application.add_handler(MessageHandler(filters.Document.FileExtension("zip"), bot_handle_zip))
+    application.add_handler(CallbackQueryHandler(bot_callback))
+    await application.run_polling()
+
 if __name__ == '__main__':
+    if TELEGRAM_BOT_TOKEN:
+        nest_asyncio.apply()
+        bot_thread = Thread(target=lambda: asyncio.run(run_bot()))
+        bot_thread.daemon = True
+        bot_thread.start()
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port, debug=False)
