@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+
+{% block title %}Select Identity{% endblock %}
+
+{% block content %}
+<div class="flex justify-center items-center min-h-screen px-4">
+    <div class="card p-4 sm:p-6 md:p-8 animate-fade-in w-full max-w-xs sm:max-w-sm md:max-w-md shadow-2xl">
+                <h2 class="text-2xl font-semibold text-center mb-6">Select Participants</h2>
+                <p class="text-center mb-6">Detected participants: {% for p in participants %}{{ p }}{% if not loop.last %}, {% endif %}{% endfor %}</p>
+                <form action="{{ url_for('select_identity') }}" method="post" class="space-y-4" onsubmit="showLoading()">
+                    <input type="hidden" name="file_path" value="{{ file_path }}">
+                    <div>
+                        <label for="you" class="block text-sm font-medium mb-2">You:</label>
+                        <select name="you" id="you" required class="w-full px-4 py-2 bg-gray-800 bg-opacity-50 text-white border border-gray-600 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent transition-all duration-300">
+                            {% for p in participants %}
+                            <option value="{{ p }}">{{ p }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div>
+                        <label for="them" class="block text-sm font-medium mb-2">Them:</label>
+                        <select name="them" id="them" required class="w-full px-4 py-2 bg-gray-800 bg-opacity-50 text-white border border-gray-600 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent transition-all duration-300">
+                            {% for p in participants %}
+                            <option value="{{ p }}">{{ p }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <button type="submit" id="continue-btn" class="btn w-full text-white font-bold py-3 px-4 rounded-lg">Continue</button>
+                    <div id="loading" class="hidden flex justify-center items-center mt-4">
+                        <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-white"></div>
+                        <span class="ml-2">Analyzing chat with AI...</span>
+                    </div>
+                </form>
+        <script>
+            function showLoading() {
+                document.getElementById('continue-btn').classList.add('hidden');
+                document.getElementById('loading').classList.remove('hidden');
+            }
+        </script>
+    </div>
+</div>
+{% endblock %}

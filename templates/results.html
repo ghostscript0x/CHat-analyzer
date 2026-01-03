@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+
+{% block title %}Results{% endblock %}
+
+{% block content %}
+<div class="flex justify-center items-start min-h-screen pt-4 sm:pt-8 md:pt-16 px-4">
+    <div class="card p-4 sm:p-6 md:p-8 animate-fade-in w-full max-w-xs sm:max-w-sm md:max-w-2xl shadow-2xl">
+        <h2 class="text-3xl font-semibold text-center mb-8">Personality Analysis Results</h2>
+        <div class="text-center mb-8">
+            <p class="text-lg"><strong>You:</strong> {{ you }}</p>
+            <p class="text-lg"><strong>Them:</strong> {{ them }}</p>
+
+        </div>
+        {% for role in roles %}
+        <div class="mb-6 p-4 bg-white bg-opacity-5 rounded-lg animate-fade-in" style="animation-delay: {{ loop.index * 0.2 }}s;">
+            <h5 class="text-xl font-bold mb-2">{{ role.name }}</h5>
+            <p class="mb-4 text-gray-200">{{ role.explanation }}</p>
+            <div class="w-full bg-gray-700 rounded-full h-6 overflow-hidden">
+                <div class="h-full bg-gradient-to-r from-pink-500 to-purple-600 progress-bar" style="width: {{ role.you }}%;"></div>
+                <div class="h-full bg-gradient-to-r from-yellow-400 to-orange-500 progress-bar" style="width: {{ role.them }}%; margin-left: {{ role.you }}%;"></div>
+            </div>
+            <div class="flex justify-between text-sm mt-2">
+                <span>You: {{ role.you }}%</span>
+                <span>Them: {{ role.them }}%</span>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+
+{% block title %}Tutorial{% endblock %}
+
+{% block content %}
+<div class="max-w-full sm:max-w-4xl mx-auto px-4">
+    <h2 class="text-3xl font-bold mb-6 text-center">How to Use BetweenLines</h2>
+    <div class="space-y-6">
+        <div class="card p-6">
+            <h3 class="text-xl font-semibold mb-4">1. Export Your WhatsApp Chat</h3>
+            <ol class="list-decimal list-inside space-y-2">
+                <li>Open WhatsApp on your phone.</li>
+                <li>Go to the chat you want to analyze.</li>
+                <li>Tap the three dots (menu) > More > Export Chat.</li>
+                <li>Choose "Without Media" to exclude photos/videos (recommended for faster processing).</li>
+                <li>The chat will download as a ZIP file.</li>
+                <li>Extract the ZIP file on your phone.</li>
+                <li>You'll get a .txt file - that's what you upload here.</li>
+            </ol>
+        </div>
+        <div class="card p-6">
+            <h3 class="text-xl font-semibold mb-4">2. Upload and Analyze</h3>
+            <ol class="list-decimal list-inside space-y-2">
+                <li>Click "Choose File" and select the .txt file.</li>
+                <li>Upload the file.</li>
+                <li>Select yourself and the other person from the dropdowns.</li>
+                <li>Wait for AI analysis (may take a few seconds).</li>
+                <li>View your personality roles and percentages.</li>
+                <li>Export results as JSON or PDF if desired.</li>
+            </ol>
+        </div>
+        <div class="card p-6">
+            <h3 class="text-xl font-semibold mb-4">3. Understanding Results</h3>
+            <p>Each role shows how often you or them exhibit that behavior. Higher percentage means more dominant in that area.</p>
+            <ul class="list-disc list-inside space-y-1 mt-4">
+                <li><strong>Conversation Starter:</strong> Initiates after silences.</li>
+                <li><strong>Snubber:</strong> Delays or short responses.</li>
+                <li><strong>Romantic One:</strong> Affectionate messages.</li>
+                <li><strong>Trouble One:</strong> Sarcastic or teasing.</li>
+                <li><strong>At Fault:</strong> Blames others.</li>
+                <li><strong>Listener:</strong> Asks questions.</li>
+                <li><strong>Joker:</strong> Uses humor.</li>
+            </ul>
+        </div>
+    </div>
+    <div class="text-center mt-8">
+        <a href="{{ url_for('index') }}" class="btn text-white font-bold py-2 px-4 rounded-lg">Back to Home</a>
+    </div>
+</div>
+{% endblock %}
