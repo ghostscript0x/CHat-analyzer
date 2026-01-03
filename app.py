@@ -40,11 +40,27 @@ def parse_whatsapp_chat(file_path):
         if not match:
             # Try [mm/dd/yy, h:mm:ss AM] sender: message
             match = re.match(r'^\[(\d{1,2}/\d{1,2}/\d{2,4}, \d{1,2}:\d{2}:\d{2} [APM]{2})\] (.+?): (.+)', line.strip())
+        if not match:
+            # Try mm/dd/yy, h:mm am/pm - sender: message
+            match = re.match(r'^(\d{1,2}/\d{1,2}/\d{2}), (\d{1,2}:\d{2}\s*[ap]m) - (.+?): (.+)', line.strip(), re.IGNORECASE)
+        if not match:
+            # Try dd.mm.yy, h:mm am/pm - sender: message
+            match = re.match(r'^(\d{1,2}\.\d{1,2}\.\d{2}), (\d{1,2}:\d{2}\s*[ap]m) - (.+?): (.+)', line.strip(), re.IGNORECASE)
+        if not match:
+            # Try dd/mm/yyyy, h:mm (24-hour) - sender: message
+            match = re.match(r'^(\d{1,2}/\d{1,2}/\d{4}), (\d{1,2}:\d{2}) - (.+?): (.+)', line.strip())
         if match:
             if len(match.groups()) == 4:
                 date_str, time_str, sender, message = match.groups()
                 timestamp_str = f"{date_str}, {time_str.strip()}"
-                date_format = '%d/%m/%Y, %I:%M %p'
+                if '.' in date_str:
+                    date_format = '%d.%m.%y, %I:%M %p'
+                elif len(time_str.strip().split()) == 1:  # 24-hour
+                    date_format = '%d/%m/%Y, %H:%M'
+                elif len(date_str.split('/')[2]) == 4:
+                    date_format = '%d/%m/%Y, %I:%M %p'
+                else:
+                    date_format = '%m/%d/%y, %I:%M %p'
             else:
                 timestamp_str, sender, message = match.groups()
                 date_format = '%m/%d/%y, %I:%M:%S %p'
@@ -264,7 +280,7 @@ def upload():
     try:
         with open(file_path, 'r', encoding='utf-8') as f:
             content = f.read(1024)
-        if not re.search(r'\d{1,2}/\d{1,2}/\d{4}, \d{1,2}:\d{2}', content):
+        if not re.search(r'\d{1,2}/\d{1,2}/\d{2,4}, \d{1,2}:\d{2}', content):
             flash('Invalid file format. Must be WhatsApp export.')
             return redirect(url_for('index'))
     except:
@@ -294,7 +310,7 @@ def upload():
     # Read first few lines to validate format
     try:
         content = file.read(1024).decode('utf-8')
-        if not re.search(r'\d{1,2}/\d{1,2}/\d{4}, \d{1,2}:\d{2}', content):
+        if not re.search(r'\d{1,2}/\d{1,2}/\d{2,4}, \d{1,2}:\d{2}', content):
             flash('Invalid file format. Must be WhatsApp export.')
             return redirect(url_for('index'))
         file.seek(0)  # Reset file pointer
