@@ -198,6 +198,10 @@ def get_groq_explanations(messages, you, them):
 def index():
     return render_template('upload.html')
 
+@app.route('/health')
+def health():
+    return {"status": "healthy"}, 200
+
 @app.route('/tutorial')
 def tutorial():
     return render_template('tutorial.html')
